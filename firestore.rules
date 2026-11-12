@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function validProfile() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'email', 'course', 'institution', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'email', 'course', 'institution', 'updatedAt'])
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.email == request.auth.token.email
+        && data.course is string && data.course.size() <= 120
+        && data.institution is string && data.institution.size() <= 160
+        && data.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow read: if owns(userId);
+      allow create, update: if owns(userId) && validProfile();
+
+      match /activities/{activityId} {
+        allow read, write: if owns(userId);
+      }
+      match /disciplines/{disciplineId} {
+        allow read, write: if owns(userId);
+      }
+    }
+  }
+}
