@@ -15,7 +15,7 @@ As principais bibliotecas são `firebase_auth`, `cloud_firestore`, `sqflite`, `c
 
 ## Executar no Android
 
-Use Flutter 3.44.8 com Dart 3.12.2 e um celular Android 7.0 ou superior com depuração USB. Na primeira configuração, siga o [guia do Firebase](docs/CONFIGURACAO_FIREBASE.md). Conecte o celular e use o identificador exibido por `flutter devices`.
+Use Flutter 3.44.8 com Dart 3.12.2 e um celular Android 7.0 ou superior com depuração USB. Conecte o celular e use o identificador exibido por `flutter devices`.
 
 ```bash
 flutter pub get
