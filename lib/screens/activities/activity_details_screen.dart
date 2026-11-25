@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/app_features.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/activity_controller.dart';
 import '../../core/theme/app_theme.dart';
@@ -12,9 +13,11 @@ class ActivityDetailsScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.activityId,
+    required this.features,
   });
   final ActivityController controller;
   final String activityId;
+  final AppFeatures features;
   @override
   State<ActivityDetailsScreen> createState() => _ActivityDetailsScreenState();
 }
@@ -77,7 +80,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
       );
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Detalhes da atividade'),
+          title: const Text('Atividade'),
           actions: [
             IconButton(
               key: const Key('edit-activity'),
@@ -89,6 +92,7 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       MaterialPageRoute<bool>(
                         builder: (_) => ActivityFormScreen(
                           controller: widget.controller,
+                          features: widget.features,
                           activity: activity,
                         ),
                       ),
@@ -144,6 +148,14 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                       _field(context, 'Disciplina', discipline.name),
                     if (activity.location.isNotEmpty)
                       _field(context, 'Local', activity.location),
+                    if (activity.address != null)
+                      _field(context, 'Endereço', activity.address!.formatted),
+                    if (activity.latitude != null && activity.longitude != null)
+                      _field(
+                        context,
+                        'Coordenadas capturadas',
+                        'Latitude: ${activity.latitude!.toStringAsFixed(6)}\nLongitude: ${activity.longitude!.toStringAsFixed(6)}',
+                      ),
                     _field(
                       context,
                       'Descrição',

@@ -2,9 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app.dart';
+import 'core/app_features.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'screens/startup/startup_screen.dart';
@@ -12,9 +14,15 @@ import 'services/firebase_auth_service.dart';
 import 'services/firestore_profile_service.dart';
 import 'services/local_database.dart';
 import 'services/sqlite_activity_repository.dart';
+import 'services/synchronized_activity_repository.dart';
+import 'services/firestore_activity_service.dart';
+import 'services/device_connection_monitor.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    AppTheme.light.appBarTheme.systemOverlayStyle!,
+  );
   runApp(const DueWiseBootstrap());
 }
 
@@ -27,7 +35,12 @@ class DueWiseBootstrap extends StatefulWidget {
 
 class _DueWiseBootstrapState extends State<DueWiseBootstrap> {
   late Future<void> _initialization;
-  late final _activities = SqliteActivityRepository(LocalDatabase());
+  late final _features = AppFeatures.device();
+  late final _activities = SynchronizedActivityRepository(
+    local: SqliteActivityRepository(LocalDatabase()),
+    remote: FirestoreActivityService(FirebaseFirestore.instance),
+    connection: DeviceConnectionMonitor(),
+  );
 
   @override
   void initState() {
@@ -45,6 +58,11 @@ class _DueWiseBootstrapState extends State<DueWiseBootstrap> {
       );
     }
     await FirebaseAuth.instance.setLanguageCode('pt-BR');
+    try {
+      await _features.photos.recoverLostSelection();
+    } catch (_) {
+      /* Uma falha na foto não bloqueia o acesso à agenda. */
+    }
   }
 
   @override
@@ -56,6 +74,7 @@ class _DueWiseBootstrapState extends State<DueWiseBootstrap> {
             !snapshot.hasError) {
           return DueWiseApp(
             activityRepository: _activities,
+            features: _features,
             authRepository: FirebaseAuthService(FirebaseAuth.instance),
             profileRepository: FirestoreProfileService(
               FirebaseFirestore.instance,

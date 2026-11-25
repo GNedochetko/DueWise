@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/app_features.dart';
+import '../profile/profile_photo_section.dart';
 import '../../controllers/activity_controller.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/inline_message.dart';
@@ -22,11 +24,13 @@ class AppShell extends StatefulWidget {
     required this.authRepository,
     required this.profileRepository,
     required this.activityRepository,
+    required this.features,
   });
   final AppUser user;
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
   final ActivityRepository activityRepository;
+  final AppFeatures features;
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -49,14 +53,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted) setState(() {});
+    if (state == AppLifecycleState.resumed && mounted) {
+      _activities.resumeSync();
+      setState(() {});
+    }
   }
 
   @override
   void didUpdateWidget(covariant AppShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.user.name != widget.user.name)
+    if (oldWidget.user.name != widget.user.name) {
       _profile = widget.profileRepository.load(widget.user);
+    }
   }
 
   @override
@@ -70,23 +78,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     try {
       await _activities.setCompleted(activity.id, !activity.completed);
     } on ActivityFailure catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 
   void _openActivity(String id) => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) =>
-          ActivityDetailsScreen(controller: _activities, activityId: id),
+      builder: (_) => ActivityDetailsScreen(
+        controller: _activities,
+        activityId: id,
+        features: widget.features,
+      ),
     ),
   );
   void _createActivity() => Navigator.of(context).push(
     MaterialPageRoute<bool>(
       builder: (_) => ActivityFormScreen(
         controller: _activities,
+        features: widget.features,
         initialDate: _index == 1 ? _selectedDay : null,
       ),
     ),
@@ -105,14 +118,16 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         future: _profile,
         builder: (context, snapshot) {
           final profile = snapshot.data;
-          if (_index == 0)
+          if (_index == 0) {
+            final name = (profile?.name ?? widget.user.name).trim();
             return HomeScreen(
-              name: profile?.name ?? widget.user.name,
+              name: name.isEmpty ? widget.user.email : name,
               controller: _activities,
               onOpenActivity: _openActivity,
               onToggle: _toggle,
             );
-          if (_index == 1)
+          }
+          if (_index == 1) {
             return CalendarScreen(
               selectedDay: _selectedDay,
               onDaySelected: (day) => setState(() => _selectedDay = day),
@@ -120,12 +135,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               onOpenActivity: _openActivity,
               onToggle: _toggle,
             );
+          }
           if (snapshot.hasError) {
             final error = snapshot.error;
             return PageContent(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  ProfilePhotoSection(
+                    userId: widget.user.id,
+                    repository: widget.features.photos,
+                  ),
                   InlineMessage(
                     message: error is ProfileFailure
                         ? error.message
@@ -144,11 +164,23 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               ),
             );
           }
-          if (profile == null)
-            return const Center(child: CircularProgressIndicator());
+          if (profile == null) {
+            return PageContent(
+              child: Column(
+                children: [
+                  ProfilePhotoSection(
+                    userId: widget.user.id,
+                    repository: widget.features.photos,
+                  ),
+                  const CircularProgressIndicator(),
+                ],
+              ),
+            );
+          }
           return ProfileScreen(
             key: ValueKey(widget.user.id),
             profile: profile,
+            photos: widget.features.photos,
             repository: widget.profileRepository,
             authRepository: widget.authRepository,
             onSaved: (updated) => setState(() {

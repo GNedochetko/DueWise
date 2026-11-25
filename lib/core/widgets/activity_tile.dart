@@ -66,6 +66,7 @@ class ActivityTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
+                        color: activity.completed ? AppColors.muted : null,
                         decoration: activity.completed
                             ? TextDecoration.lineThrough
                             : null,
@@ -94,6 +95,7 @@ class ActivityTile extends StatelessWidget {
                     Text(
                       status,
                       style: TextStyle(
+                        fontSize: 13,
                         color: overdue
                             ? Theme.of(context).colorScheme.error
                             : AppColors.primary,

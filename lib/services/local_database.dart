@@ -1,11 +1,10 @@
+import 'dart:convert';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
-/// Uma conexão compartilhada; a conta é isolada pelas chaves e consultas.
 class LocalDatabase {
-  LocalDatabase({DatabaseFactory? factory, String? databasePath})
-    : _factory = factory,
-      _path = databasePath;
+  LocalDatabase({this._factory, String? databasePath}) : _path = databasePath;
   final DatabaseFactory? _factory;
   final String? _path;
   Future<Database>? _opening;
@@ -19,28 +18,34 @@ class LocalDatabase {
       return await factory.openDatabase(
         databasePath,
         options: OpenDatabaseOptions(
-          version: 1,
-          onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-          onCreate: (db, version) async {
-            await db.execute('''CREATE TABLE disciplines (
-            id TEXT NOT NULL, user_id TEXT NOT NULL,
-            name TEXT NOT NULL COLLATE NOCASE, color INTEGER NOT NULL,
-            PRIMARY KEY (user_id, id), UNIQUE (user_id, name)
-          )''');
-            await db.execute('''CREATE TABLE activities (
-            id TEXT NOT NULL, user_id TEXT NOT NULL,
-            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
-            discipline_id TEXT, type TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '', due_at INTEGER NOT NULL,
-            priority TEXT NOT NULL, completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
-            location TEXT NOT NULL DEFAULT '', latitude REAL, longitude REAL,
-            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-            PRIMARY KEY (user_id, id),
-            FOREIGN KEY (user_id, discipline_id) REFERENCES disciplines(user_id, id)
-          )''');
-            await db.execute(
-              'CREATE INDEX activities_user_due ON activities(user_id, due_at)',
-            );
+          version: 2,
+          onCreate: (db, version) => _createQueue(db),
+          onUpgrade: (db, oldVersion, newVersion) async {
+            if (oldVersion < 2) {
+              await _createQueue(db);
+              // onUpgrade executa em transação: qualquer falha preserva o banco v1.
+              for (final table in ['disciplines', 'activities']) {
+                final entity = table == 'disciplines'
+                    ? 'discipline'
+                    : 'activity';
+                for (final row in await db.query(table)) {
+                  await db.insert('pending_operations', {
+                    'user_id': row['user_id'],
+                    'entity': entity,
+                    'record_id': row['id'],
+                    'operation': 'upsert',
+                    'payload': jsonEncode(row),
+                    'revision': const Uuid().v4(),
+                    'created_at':
+                        row['created_at'] ??
+                        DateTime.now().millisecondsSinceEpoch,
+                    'attempts': 0,
+                  });
+                }
+              }
+              await db.execute('DROP TABLE activities');
+              await db.execute('DROP TABLE disciplines');
+            }
           },
         ),
       );
@@ -48,6 +53,16 @@ class LocalDatabase {
       _opening = null;
       rethrow;
     }
+  }
+
+  Future<void> _createQueue(Database db) async {
+    await db.execute('''CREATE TABLE pending_operations (
+      user_id TEXT NOT NULL, entity TEXT NOT NULL CHECK(entity IN ('activity', 'discipline')),
+      record_id TEXT NOT NULL, operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
+      payload TEXT NOT NULL, revision TEXT NOT NULL, created_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+      PRIMARY KEY (user_id, entity, record_id)
+    )''');
   }
 
   Future<void> close() async {

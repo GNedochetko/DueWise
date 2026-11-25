@@ -16,15 +16,66 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    function validActivity(userId, activityId) {
+      let data = request.resource.data;
+      return data.keys().hasAll(['id', 'userId', 'mutationId', 'serverUpdatedAt',
+          'title', 'disciplineId', 'type', 'description', 'dueAt', 'priority',
+          'completed', 'location', 'latitude', 'longitude', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'mutationId', 'serverUpdatedAt',
+          'title', 'disciplineId', 'type', 'description', 'dueAt', 'priority',
+          'completed', 'location', 'latitude', 'longitude', 'createdAt', 'updatedAt', 'address'])
+        && data.id == activityId && data.userId == userId
+        && data.mutationId is string && data.mutationId.size() > 0 && data.mutationId.size() <= 128
+        && data.serverUpdatedAt == request.time
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 160
+        && data.type in ['exam', 'assignment', 'presentation', 'event', 'technicalVisit']
+        && data.priority in ['low', 'medium', 'high']
+        && data.description is string && data.description.size() <= 2000
+        && data.location is string && data.location.size() <= 200
+        && data.completed is bool
+        && data.dueAt is timestamp && data.createdAt is timestamp && data.updatedAt is timestamp
+        && (data.latitude == null || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90))
+        && (data.longitude == null || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180))
+        && (!('address' in data) || data.address == null || validAddress(data.address))
+        && (data.disciplineId == null || (data.disciplineId is string
+          && exists(/databases/$(database)/documents/users/$(userId)/disciplines/$(data.disciplineId))));
+    }
+
+    function validDiscipline(userId, disciplineId) {
+      let data = request.resource.data;
+      return data.keys().hasAll(['id', 'userId', 'name', 'color', 'mutationId', 'serverUpdatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'color', 'mutationId', 'serverUpdatedAt'])
+        && data.id == disciplineId && data.userId == userId
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.color is int && data.color >= 0 && data.color <= 4294967295
+        && data.mutationId is string && data.mutationId.size() > 0 && data.mutationId.size() <= 128
+        && data.serverUpdatedAt == request.time;
+    }
+
+    function validAddress(data) {
+      return data is map
+        && data.keys().hasAll(['cep', 'street', 'neighborhood', 'city', 'state', 'number', 'complement'])
+        && data.keys().hasOnly(['cep', 'street', 'neighborhood', 'city', 'state', 'number', 'complement'])
+        && data.cep is string && (data.cep == '' || data.cep.matches('^[0-9]{8}$'))
+        && data.street is string && data.street.size() <= 160
+        && data.neighborhood is string && data.neighborhood.size() <= 100
+        && data.city is string && data.city.size() <= 100
+        && data.state is string && (data.state == '' || data.state.matches('^[A-Z]{2}$'))
+        && data.number is string && data.number.size() <= 20
+        && data.complement is string && data.complement.size() <= 160;
+    }
+
     match /users/{userId} {
       allow read: if owns(userId);
       allow create, update: if owns(userId) && validProfile();
 
       match /activities/{activityId} {
-        allow read, write: if owns(userId);
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId) && validActivity(userId, activityId);
       }
       match /disciplines/{disciplineId} {
-        allow read, write: if owns(userId);
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId) && validDiscipline(userId, disciplineId);
       }
     }
   }

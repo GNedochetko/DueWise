@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/brand_logo.dart';
 
 class StartupScreen extends StatelessWidget {
   const StartupScreen({
@@ -17,46 +16,75 @@ class StartupScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        child: !hasError
+            ? Stack(
+                fit: StackFit.expand,
                 children: [
-                  const BrandLogo(size: 56),
-                  const SizedBox(height: 40),
-                  if (!hasError)
-                    const CircularProgressIndicator()
-                  else ...[
-                    Text(
-                      configurationMissing
-                          ? 'Configuração inicial pendente'
-                          : 'Não foi possível iniciar o DueWise',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleLarge,
+                  Center(
+                    child: Image.asset(
+                      'assets/branding/monk_splash.webp',
+                      width: 288,
+                      height: 288,
+                      excludeFromSemantics: true,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      configurationMissing
-                          ? 'Conclua a configuração do aplicativo antes de entrar.'
-                          : 'Verifique sua conexão e tente novamente.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.muted),
+                  ),
+                  Center(
+                    child: Transform.translate(
+                      offset: const Offset(0, 124),
+                      child: const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          semanticsLabel: 'Iniciando DueWise',
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 24),
-                    OutlinedButton(
-                      onPressed: onRetry,
-                      child: const Text('Tentar novamente'),
-                    ),
-                  ],
+                  ),
                 ],
-              ),
-            ),
-          ),
-        ),
+              )
+            : _errorContent(context),
       ),
     );
   }
+
+  Widget _errorContent(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/branding/monk_splash.webp',
+              width: 192,
+              height: 192,
+              excludeFromSemantics: true,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              configurationMissing
+                  ? 'Configuração inicial pendente'
+                  : 'Não foi possível iniciar o DueWise',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              configurationMissing
+                  ? 'Conclua a configuração do aplicativo antes de entrar.'
+                  : 'Verifique sua conexão e tente novamente.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

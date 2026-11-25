@@ -1,115 +1,141 @@
-import 'package:sqflite/sqflite.dart';
 import '../models/academic_activity.dart';
 import '../models/discipline.dart';
+import '../models/pending_operation.dart';
 import '../repositories/activity_repository.dart';
 import 'local_database.dart';
+import 'pending_operations_store.dart';
 
+/// Visão local das alterações ainda não confirmadas pelo servidor.
 class SqliteActivityRepository implements ActivityRepository {
-  SqliteActivityRepository(this._local);
-  final LocalDatabase _local;
-  Future<T> _run<T>(Future<T> Function(Database db) action) async {
-    try {
-      return await action(await _local.database);
-    } on DatabaseException catch (_) {
-      throw const ActivityFailure(
-        'Não foi possível acessar as atividades salvas. Tente novamente.',
-      );
+  SqliteActivityRepository(LocalDatabase database)
+    : pending = PendingOperationsStore(database);
+  final PendingOperationsStore pending;
+  @override
+  Future<List<AcademicActivity>> listActivities(String userId) async {
+    final items = (await pending.list(userId))
+        .where(
+          (op) =>
+              op.entity == SyncEntity.activity &&
+              op.operation == SyncOperation.upsert,
+        )
+        .map((op) => AcademicActivity.fromMap(op.payload))
+        .toList();
+    items.sort((a, b) => a.dueAt.compareTo(b.dueAt));
+    return items;
+  }
+
+  @override
+  Future<AcademicActivity?> findActivity(String userId, String id) async {
+    final op = await pending.find(userId, SyncEntity.activity, id);
+    return op == null || op.operation == SyncOperation.delete
+        ? null
+        : AcademicActivity.fromMap(op.payload);
+  }
+
+  Future<void> _validateDiscipline(AcademicActivity activity) async {
+    if (activity.disciplineId != null &&
+        !(await listDisciplines(
+          activity.userId,
+        )).any((d) => d.id == activity.disciplineId)) {
+      throw const ActivityFailure('Selecione uma disciplina desta conta.');
     }
   }
 
   @override
-  Future<List<AcademicActivity>> listActivities(String userId) =>
-      _run((db) async {
-        final rows = await db.query(
-          'activities',
-          where: 'user_id = ?',
-          whereArgs: [userId],
-          orderBy: 'due_at ASC, created_at ASC, id ASC',
-        );
-        return rows.map(AcademicActivity.fromMap).toList();
-      });
-  @override
-  Future<AcademicActivity?> findActivity(String userId, String id) =>
-      _run((db) async {
-        final rows = await db.query(
-          'activities',
-          where: 'user_id = ? AND id = ?',
-          whereArgs: [userId, id],
-          limit: 1,
-        );
-        return rows.isEmpty ? null : AcademicActivity.fromMap(rows.first);
-      });
-  @override
-  Future<void> insertActivity(AcademicActivity activity) => _run((db) async {
-    await db.insert('activities', activity.toMap());
-  });
-  @override
-  Future<void> updateActivity(AcademicActivity activity) => _run((db) async {
-    final values = activity.toMap()
-      ..remove('id')
-      ..remove('user_id')
-      ..remove('created_at');
-    final count = await db.update(
-      'activities',
-      values,
-      where: 'user_id = ? AND id = ?',
-      whereArgs: [activity.userId, activity.id],
+  Future<void> insertActivity(AcademicActivity activity) async {
+    if (await findActivity(activity.userId, activity.id) != null) {
+      throw const ActivityFailure('Esta atividade já existe.');
+    }
+    await _validateDiscipline(activity);
+    await enqueueActivity(activity);
+  }
+
+  Future<void> enqueueActivity(AcademicActivity activity) async {
+    if (activity.title.trim().isEmpty) {
+      throw const ActivityFailure('Informe o título da atividade.');
+    }
+    await pending.put(
+      userId: activity.userId,
+      entity: SyncEntity.activity,
+      id: activity.id,
+      operation: SyncOperation.upsert,
+      payload: activity.toMap(),
     );
-    _requireFound(count);
-  });
+  }
+
+  @override
+  Future<void> updateActivity(AcademicActivity activity) async {
+    final existing = await findActivity(activity.userId, activity.id);
+    if (existing == null) {
+      throw const ActivityFailure('Esta atividade não está mais disponível.');
+    }
+    await _validateDiscipline(activity);
+    await enqueueActivity(
+      AcademicActivity.fromMap({
+        ...activity.toMap(),
+        'created_at': existing.createdAt.millisecondsSinceEpoch,
+      }),
+    );
+  }
+
   @override
   Future<void> setCompleted(
     String userId,
     String id,
     bool completed,
     DateTime updatedAt,
-  ) => _run((db) async {
-    final count = await db.update(
-      'activities',
-      {
-        'completed': completed ? 1 : 0,
-        'updated_at': updatedAt.millisecondsSinceEpoch,
-      },
-      where: 'user_id = ? AND id = ?',
-      whereArgs: [userId, id],
-    );
-    _requireFound(count);
-  });
-  @override
-  Future<void> deleteActivity(String userId, String id) => _run((db) async {
-    final count = await db.delete(
-      'activities',
-      where: 'user_id = ? AND id = ?',
-      whereArgs: [userId, id],
-    );
-    _requireFound(count);
-  });
-  @override
-  Future<List<Discipline>> listDisciplines(String userId) => _run((db) async {
-    final rows = await db.query(
-      'disciplines',
-      where: 'user_id = ?',
-      whereArgs: [userId],
-      orderBy: 'name COLLATE NOCASE',
-    );
-    return rows.map(Discipline.fromMap).toList();
-  });
-  @override
-  Future<void> insertDiscipline(Discipline discipline) async {
-    try {
-      final db = await _local.database;
-      await db.insert('disciplines', discipline.toMap());
-    } on DatabaseException catch (error) {
-      if (error.isUniqueConstraintError())
-        throw const ActivityFailure('Já existe uma disciplina com esse nome.');
-      throw const ActivityFailure(
-        'Não foi possível salvar a disciplina. Tente novamente.',
-      );
+  ) async {
+    final activity = await findActivity(userId, id);
+    if (activity == null) {
+      throw const ActivityFailure('Esta atividade não está mais disponível.');
     }
+    await enqueueActivity(activity.withCompletion(completed, updatedAt));
   }
 
-  void _requireFound(int count) {
-    if (count == 0)
+  @override
+  Future<void> deleteActivity(String userId, String id) async {
+    final activity = await findActivity(userId, id);
+    if (activity == null) {
       throw const ActivityFailure('Esta atividade não está mais disponível.');
+    }
+    await enqueueDeletion(userId, id);
+  }
+
+  Future<void> enqueueDeletion(String userId, String id) async {
+    // Mesmo um cadastro em envio pode chegar ao servidor; registrar a exclusão é seguro.
+    await pending.put(
+      userId: userId,
+      entity: SyncEntity.activity,
+      id: id,
+      operation: SyncOperation.delete,
+      payload: {'id': id, 'user_id': userId},
+    );
+  }
+
+  @override
+  Future<List<Discipline>> listDisciplines(String userId) async =>
+      (await pending.list(userId))
+          .where(
+            (op) =>
+                op.entity == SyncEntity.discipline &&
+                op.operation == SyncOperation.upsert,
+          )
+          .map((op) => Discipline.fromMap(op.payload))
+          .toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  @override
+  Future<void> insertDiscipline(Discipline discipline) async {
+    if ((await listDisciplines(
+      discipline.userId,
+    )).any((d) => d.name.toLowerCase() == discipline.name.toLowerCase())) {
+      throw const ActivityFailure('Já existe uma disciplina com esse nome.');
+    }
+    await pending.put(
+      userId: discipline.userId,
+      entity: SyncEntity.discipline,
+      id: discipline.id,
+      operation: SyncOperation.upsert,
+      payload: discipline.toMap(),
+    );
   }
 }

@@ -6,16 +6,20 @@ import '../../core/widgets/page_content.dart';
 import '../../models/user_profile.dart';
 import '../../repositories/auth_repository.dart';
 import '../../repositories/profile_repository.dart';
+import '../../repositories/device_features.dart';
+import 'profile_photo_section.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.profile,
+    required this.photos,
     required this.repository,
     required this.authRepository,
     required this.onSaved,
   });
   final UserProfile profile;
+  final ProfilePhotoRepository photos;
   final ProfileRepository repository;
   final AuthRepository authRepository;
   final ValueChanged<UserProfile> onSaved;
@@ -90,6 +94,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            ProfilePhotoSection(
+              userId: widget.profile.userId,
+              repository: widget.photos,
+            ),
             const SizedBox(height: 8),
             Text(
               'Dados pessoais',

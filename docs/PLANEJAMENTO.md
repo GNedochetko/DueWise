@@ -1,72 +1,17 @@
-# Planejamento do DueWise
+# Escopo do DueWise
 
-## Decisões confirmadas
+Agenda acadêmica em português para Android. O tema claro usa azul como cor principal, o monge na abertura e o monograma DW nas telas internas. A navegação reúne agenda, calendário e perfil.
 
-- Depuração exclusivamente em celular Android físico por USB; não iniciar emuladores.
-- Aplicativo exclusivamente Android, em português do Brasil, com datas brasileiras e relógio de 24 horas.
-- Visual sério e profissional; tema apenas claro; azul principal e superfícies claras.
-- Cantos discretamente arredondados, espaço entre elementos e ícones vinculados a ações concretas.
-- Sem slogans, ilustrações decorativas espalhadas, sombras fortes ou detalhes excessivos.
-- Monge barbudo no ícone de instalação e na abertura; DW estilizado na marca interna.
-- Início com resumo de hoje, próximos prazos e atrasadas.
-- Barra inferior com Início, Calendário e Perfil.
-- Disciplinas terão cadastro próprio com nome e cor.
-- Tipos de atividade: prova, trabalho, apresentação, evento e visita técnica.
-- Prioridades: baixa, média e alta; média como valor inicial proposto.
-- Situação: pendente ou concluída; atraso calculado pela data e horário.
-- Cadastro com nome completo, e-mail, senha e confirmação. Curso e instituição são opcionais no perfil.
-- Firebase Authentication realiza o cadastro e login e mantém a sessão no Android. Após criar a conta, a sessão autenticada abre a área principal. Não há bloqueio adicional por verificação de e-mail nesta etapa.
-- Senha do cadastro com pelo menos oito caracteres. No login, aceitar a senha existente e deixar o Firebase validar as credenciais.
+## Dados e sincronização
 
-## Primeira etapa
+- O Firebase Authentication identifica o estudante. O perfil fica em `users/{uid}` e as subcoleções `activities` e `disciplines` pertencem à mesma conta.
+- Cada criação, edição ou exclusão de atividade grava primeiro uma operação em `pending_operations`, no SQLite. O UUID da atividade também identifica o documento no Firestore. O app reenvia as pendências ao abrir, voltar ao primeiro plano ou recuperar a conexão.
+- Após a confirmação do servidor e a leitura do cache, o app remove do SQLite somente a revisão enviada. Uma edição feita durante o envio continua pendente. Fora da rede, a agenda combina o histórico disponível no cache do Firestore e as alterações locais.
+- Cada atividade pode ter coordenadas e endereço. O GPS é acionado pelo estudante. O ViaCEP preenche o endereço e o formulário aceita entrada manual. A foto de perfil fica no aparelho, associada à conta.
 
-1. Estruturar aplicativo, tema, marca e navegação.
-2. Implementar login, cadastro, recuperação, sessão e logout.
-3. Disponibilizar perfil acadêmico editável no Firestore.
-4. Preparar modelos de domínio para o CRUD.
-5. Documentar criação do projeto Firebase, regras e execução.
-6. Verificar análise estática, testes de interface e geração de APK.
+## Conferência no celular
 
-A primeira etapa não implementa o CRUD das atividades nem a sincronização offline. As telas iniciais não contêm atividades de demonstração.
-
-## Dados planejados
-
-### Disciplina
-
-`id`, `userId`, `name`, `color`.
-
-### Atividade
-
-`id`, `userId`, `title`, `disciplineId`, `type`, `description`, `dueAt`, `priority`, `completed`, `location`, `latitude`, `longitude`, `createdAt`, `updatedAt`.
-
-`dueAt` representa o momento da prova, evento ou entrega. O armazenamento deverá normalizar instantes e a apresentação usar horário local. Os modelos desta etapa ainda não definem serialização SQLite/Firestore.
-
-### Perfil
-
-Documento `users/{uid}`: `name`, `email`, `course`, `institution`, `updatedAt`.
-O nome inicial vem do Firebase Authentication; depois de salvar o perfil, o documento Firestore fornece o nome apresentado no aplicativo. O e-mail é sempre obtido da conta autenticada, sem campo de edição.
-
-Coleções futuras: `users/{uid}/disciplines/{id}` e `users/{uid}/activities/{id}`.
-
-## Próximas etapas
-
-1. CRUD de disciplinas e atividades com SQLite e persistência após reabertura.
-2. Firestore de atividades e fila de sincronização, identificadores estáveis, reenvio e exclusões pendentes.
-3. Ligar resumo e calendário aos registros persistidos.
-4. GPS associado aos registros e persistência das coordenadas.
-5. Foto de perfil local e consulta de CEP para endereços, como proposta inicial ainda ajustável.
-6. Testes integrados, documentação final, APK e preparação da defesa.
-
-## Decisão a esclarecer sobre offline
-
-O enunciado pede limpeza dos registros SQLite após confirmação do envio. Planejar a fila de operações pendentes com essa regra e esclarecer com o professor a expectativa de acesso offline ao histórico sincronizado antes de adicionar um cache permanente. A exclusão offline de registros remotos exige uma operação pendente de exclusão; somente apagar a linha local não basta.
-
-## Escolhas técnicas
-
-- Interface e formulários com widgets Flutter, `setState` e `StreamBuilder`.
-- Interfaces de repositório permitem testar sem conta Firebase; a execução normal injeta serviços Firebase reais.
-- Serviços sem conhecimento de widgets e widgets sem chamadas diretas ao Firebase.
-- `AuthGate` mantém a área interna acessível apenas com usuário autenticado.
-- O estado de sessão vem do SDK Firebase, sem gravar senha no dispositivo.
-- Perfil salvo em caminho por UID; as regras verificam o proprietário e os campos permitidos.
-- Bibliotecas de SQLite, GPS e imagens serão adicionadas quando as funcionalidades forem implementadas.
+1. Entre com uma conta, crie uma atividade e confira o mesmo registro no calendário e no Firestore.
+2. Desligue o Wi-Fi e os dados móveis. Cadastre e edite uma segunda atividade e exclua a primeira. Feche e reabra o app ainda offline e confira as mudanças.
+3. Religue a internet. Confira no Firestore a exclusão da primeira atividade e uma única cópia da segunda com a última edição.
+4. Capture o GPS e consulte um CEP na atividade. Selecione uma foto no perfil, reabra o app e confira a imagem. Troque de conta para verificar a separação dos registros e das fotos.

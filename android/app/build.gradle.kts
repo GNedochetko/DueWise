@@ -18,6 +18,7 @@ android {
     }
 
     defaultConfig {
+        resourceConfigurations.addAll(listOf("pt", "pt-rBR"))
         applicationId = "br.com.gnedochetko.duewise"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -26,6 +27,9 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+
+    // Comprime as bibliotecas nativas no APK distribuído diretamente.
+    packaging.jniLibs.useLegacyPackaging = true
 
     buildTypes {
         release {

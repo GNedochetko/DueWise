@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../controllers/activity_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/activity_tile.dart';
 import '../../core/widgets/inline_message.dart';
 import '../../core/widgets/page_content.dart';
+import '../../core/widgets/sync_status_card.dart';
 import '../../models/academic_activity.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -63,10 +65,17 @@ class _HomeScreenState extends State<HomeScreen> {
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Veja seus compromissos e prazos.',
-            style: TextStyle(color: AppColors.muted),
+          Text(
+            DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(now),
+            style: const TextStyle(color: AppColors.muted),
           ),
+          if (controller.syncState != null) ...[
+            const SizedBox(height: 16),
+            SyncStatusCard(
+              state: controller.syncState!,
+              onRetry: controller.syncNow,
+            ),
+          ],
           const SizedBox(height: 28),
           if (controller.loading)
             const Center(
@@ -85,44 +94,61 @@ class _HomeScreenState extends State<HomeScreen> {
           ] else ...[
             LayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.maxWidth < 360
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - 24) / 3;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (var i = 0; i < counts.length; i++)
-                      SizedBox(
-                        width: width,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${counts[i]}',
-                                  key: Key('summary-$i'),
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  ['Hoje', 'Próximos 7 dias', 'Atrasadas'][i],
-                                  style: const TextStyle(
-                                    color: AppColors.muted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                final horizontal =
+                    constraints.maxWidth >= 300 &&
+                    MediaQuery.textScalerOf(context).scale(14) <= 18;
+                Widget summary(int i) => Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${counts[i]}',
+                        key: Key('summary-$i'),
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        ['Hoje', 'Próximos 7 dias', 'Atrasadas'][i],
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                return Card(
+                  child: horizontal
+                      ? IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < counts.length; i++) ...[
+                                if (i > 0)
+                                  const VerticalDivider(
+                                    width: 1,
+                                    color: AppColors.border,
+                                  ),
+                                Expanded(child: summary(i)),
+                              ],
+                            ],
+                          ),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var i = 0; i < counts.length; i++) ...[
+                              if (i > 0) const Divider(),
+                              summary(i),
+                            ],
+                          ],
+                        ),
                 );
               },
             ),

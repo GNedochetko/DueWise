@@ -27,7 +27,7 @@ class BrandLogo extends StatelessWidget {
               style: TextStyle(
                 fontSize: size * .52,
                 fontWeight: FontWeight.w700,
-                letterSpacing: -.7,
+                letterSpacing: -.4,
                 color: AppColors.navy,
               ),
             ),

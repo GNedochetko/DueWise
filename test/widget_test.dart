@@ -3,12 +3,14 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:duewise/app.dart';
+import 'package:duewise/models/academic_activity.dart';
+import 'package:duewise/models/app_user.dart';
 import 'package:duewise/main.dart';
 import 'package:duewise/repositories/auth_repository.dart';
 import 'package:duewise/repositories/profile_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import 'support/app_fonts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/fakes.dart';
 
@@ -17,15 +19,7 @@ void main() {
   late FakeProfileRepository profiles;
   late MemoryActivityRepository activities;
 
-  setUpAll(() async {
-    final textFonts = FontLoader('Roboto')
-      ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf'))
-      ..addFont(rootBundle.load('assets/fonts/Roboto-Medium.ttf'))
-      ..addFont(rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
-    final iconFont = FontLoader('MaterialIcons')
-      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
-    await Future.wait([textFonts.load(), iconFont.load()]);
-  });
+  setUpAll(loadAppFonts);
 
   setUp(() {
     auth = FakeAuthRepository();
@@ -50,6 +44,7 @@ void main() {
           authRepository: auth,
           profileRepository: profiles,
           activityRepository: activities,
+          features: testFeatures(),
         ),
       ),
     );
@@ -119,6 +114,14 @@ void main() {
     await tapKey(tester, 'sign-out');
     expect(find.byKey(const Key('auth-submit')), findsOneWidget);
     expect(find.text('Atividades'), findsNothing);
+  });
+
+  testWidgets('agenda identifica pelo e-mail a conta sem nome', (tester) async {
+    auth.changeUser(
+      const AppUser(id: 'sem-nome', email: 'aluno@example.com', name: ''),
+    );
+    await launch(tester);
+    expect(find.text('Olá, aluno@example.com'), findsOneWidget);
   });
 
   testWidgets('credenciais recusadas preservam formulário e mostram erro', (
@@ -279,16 +282,22 @@ void main() {
   testWidgets(
     'telas preservam tema claro e navegação e geram prévias opcionais',
     (tester) async {
+      final today = DateTime.now();
+      activities.activities.add(
+        AcademicActivity(
+          id: 'mobile',
+          userId: student.id,
+          title: 'Trabalho final de Mobile',
+          type: ActivityType.assignment,
+          dueAt: DateTime(today.year, today.month, today.day, 23, 59),
+          createdAt: today,
+          updatedAt: today,
+        ),
+      );
       await launch(tester);
       final context = tester.element(find.byKey(const Key('auth-submit')));
       expect(Theme.of(context).brightness, Brightness.light);
       await capture(tester, 'login');
-      await tapKey(tester, 'open-register');
-      await capture(tester, 'cadastro');
-      await tapKey(tester, 'back-login');
-      await tapKey(tester, 'open-reset');
-      await capture(tester, 'recuperar-senha');
-      await tapKey(tester, 'back-login');
       await tester.enterText(find.byKey(const Key('email')), 'ana@example.com');
       await tester.enterText(find.byKey(const Key('password')), 'senha1234');
       await tapKey(tester, 'auth-submit');
@@ -299,7 +308,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Perfil'));
       await tester.pumpAndSettle();
-      await capture(tester, 'perfil');
+      expect(find.byKey(const Key('profile-name')), findsOneWidget);
     },
   );
 }

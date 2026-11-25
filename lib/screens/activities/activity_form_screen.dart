@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../core/app_features.dart';
+import '../../models/activity_address.dart';
+import '../../repositories/device_features.dart';
+import 'activity_location_editor.dart';
+import 'activity_address_editor.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/activity_controller.dart';
 import '../../core/widgets/inline_message.dart';
@@ -12,10 +17,12 @@ class ActivityFormScreen extends StatefulWidget {
   const ActivityFormScreen({
     super.key,
     required this.controller,
+    required this.features,
     this.activity,
     this.initialDate,
   });
   final ActivityController controller;
+  final AppFeatures features;
   final AcademicActivity? activity;
   final DateTime? initialDate;
   @override
@@ -33,12 +40,20 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
   String? _disciplineId;
   late DateTime _dueAt;
   var _saving = false;
+  var _capturing = false;
+  var _lookingUp = false;
+  Coordinates? _coordinates;
+  ActivityAddress? _address;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     final activity = widget.activity;
+    _address = activity?.address;
+    if (activity?.latitude != null && activity?.longitude != null) {
+      _coordinates = Coordinates(activity!.latitude!, activity.longitude!);
+    }
     _title = TextEditingController(text: activity?.title ?? '');
     _description = TextEditingController(text: activity?.description ?? '');
     _location = TextEditingController(text: activity?.location ?? '');
@@ -76,7 +91,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100, 12, 31),
     );
-    if (day != null && mounted)
+    if (day != null && mounted) {
       setState(
         () => _dueAt = DateTime(
           day.year,
@@ -86,6 +101,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
           _dueAt.minute,
         ),
       );
+    }
   }
 
   Future<void> _pickTime() async {
@@ -97,7 +113,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
         child: child!,
       ),
     );
-    if (time != null && mounted)
+    if (time != null && mounted) {
       setState(
         () => _dueAt = DateTime(
           _dueAt.year,
@@ -107,6 +123,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
           time.minute,
         ),
       );
+    }
   }
 
   Future<void> _createDiscipline() async {
@@ -115,12 +132,18 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
       barrierDismissible: false,
       builder: (_) => DisciplineDialog(controller: widget.controller),
     );
-    if (discipline != null && mounted)
+    if (discipline != null && mounted) {
       setState(() => _disciplineId = discipline.id);
+    }
   }
 
   Future<void> _save() async {
-    if (_saving || !_form.currentState!.validate()) return;
+    if (_saving ||
+        _capturing ||
+        _lookingUp ||
+        !_form.currentState!.validate()) {
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _saving = true;
@@ -139,8 +162,9 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
       priority: _priority,
       completed: previous?.completed ?? false,
       location: _location.text.trim(),
-      latitude: previous?.latitude,
-      longitude: previous?.longitude,
+      latitude: _coordinates?.latitude,
+      longitude: _coordinates?.longitude,
+      address: _address,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
     );
@@ -225,6 +249,14 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                     value: '',
                     child: Text('Sem disciplina'),
                   ),
+                  if (_disciplineId != null &&
+                      !widget.controller.disciplines.any(
+                        (d) => d.id == _disciplineId,
+                      ))
+                    DropdownMenuItem(
+                      value: _disciplineId,
+                      child: const Text('Disciplina indisponível'),
+                    ),
                   for (final discipline in widget.controller.disciplines)
                     DropdownMenuItem(
                       value: discipline.id,
@@ -288,8 +320,9 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                 onChanged: _saving
                     ? null
                     : (priority) {
-                        if (priority != null)
+                        if (priority != null) {
                           setState(() => _priority = priority);
+                        }
                       },
               ),
               const SizedBox(height: 18),
@@ -319,13 +352,33 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                 onFieldSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 24),
+              ActivityLocationEditor(
+                service: widget.features.location,
+                initialValue: _coordinates,
+                enabled: !_saving,
+                onChanged: (value) => _coordinates = value,
+                onBusyChanged: (busy) {
+                  if (mounted) setState(() => _capturing = busy);
+                },
+              ),
+              const SizedBox(height: 20),
+              ActivityAddressEditor(
+                lookup: widget.features.addresses,
+                initialValue: _address,
+                enabled: !_saving,
+                onChanged: (value) => _address = value,
+                onBusyChanged: (busy) {
+                  if (mounted) setState(() => _lookingUp = busy);
+                },
+              ),
+              const SizedBox(height: 24),
               if (_error != null) ...[
                 InlineMessage(message: _error!),
                 const SizedBox(height: 16),
               ],
               FilledButton(
                 key: const Key('save-activity'),
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _capturing || _lookingUp ? null : _save,
                 child: _saving
                     ? const SizedBox(
                         width: 22,

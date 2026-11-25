@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/theme/app_theme.dart';
+import 'core/app_features.dart';
 import 'models/app_user.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/activity_repository.dart';
@@ -15,10 +16,12 @@ class DueWiseApp extends StatelessWidget {
     required this.authRepository,
     required this.profileRepository,
     required this.activityRepository,
+    required this.features,
   });
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
   final ActivityRepository activityRepository;
+  final AppFeatures features;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +37,7 @@ class DueWiseApp extends StatelessWidget {
         authRepository: authRepository,
         profileRepository: profileRepository,
         activityRepository: activityRepository,
+        features: features,
       ),
     );
   }
@@ -45,10 +49,12 @@ class AuthGate extends StatefulWidget {
     required this.authRepository,
     required this.profileRepository,
     required this.activityRepository,
+    required this.features,
   });
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
   final ActivityRepository activityRepository;
+  final AppFeatures features;
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
@@ -83,8 +89,9 @@ class _AuthGateState extends State<AuthGate> {
         final user = snapshot.data;
         if (_sessionUserId != null && _sessionUserId != user?.id) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted)
+            if (mounted) {
               Navigator.of(this.context).popUntil((route) => route.isFirst);
+            }
           });
         }
         _sessionUserId = user?.id;
@@ -95,6 +102,7 @@ class _AuthGateState extends State<AuthGate> {
           authRepository: widget.authRepository,
           profileRepository: widget.profileRepository,
           activityRepository: widget.activityRepository,
+          features: widget.features,
         );
       },
     );

@@ -1,3 +1,6 @@
+import 'package:duewise/core/app_features.dart';
+import 'package:duewise/models/activity_address.dart';
+import 'package:duewise/repositories/device_features.dart';
 import 'dart:async';
 import 'package:duewise/models/app_user.dart';
 import 'package:duewise/models/user_profile.dart';
@@ -101,8 +104,9 @@ class MemoryActivityRepository implements ActivityRepository {
   bool failWrites = false;
   bool failReads = false;
   void _checkWrite() {
-    if (failWrites)
+    if (failWrites) {
       throw const ActivityFailure('Falha de gravação para teste.');
+    }
   }
 
   @override
@@ -166,3 +170,68 @@ class MemoryActivityRepository implements ActivityRepository {
     disciplines.add(discipline);
   }
 }
+
+class FakeLocationService implements LocationService {
+  Coordinates result = const Coordinates(-25.38, -51.46);
+  LocationFailure? failure;
+  int captures = 0;
+  LocationResolution? opened;
+  @override
+  Future<Coordinates> capture() async {
+    captures++;
+    if (failure != null) throw failure!;
+    return result;
+  }
+
+  @override
+  Future<void> openSettings(LocationResolution resolution) async {
+    opened = resolution;
+  }
+}
+
+class FakeAddressLookup implements AddressLookup {
+  ActivityAddress result = const ActivityAddress(
+    cep: '01001000',
+    street: 'Praça da Sé',
+    neighborhood: 'Sé',
+    city: 'São Paulo',
+    state: 'SP',
+  );
+  AddressFailure? failure;
+  String? requested;
+  @override
+  Future<ActivityAddress> lookup(String cep) async {
+    requested = cep;
+    if (failure != null) throw failure!;
+    return result;
+  }
+}
+
+class MemoryPhotoRepository implements ProfilePhotoRepository {
+  final paths = <String, String>{};
+  String? selected;
+  PhotoFailure? failure;
+  ProfilePhotoSource? lastSource;
+  @override
+  Future<void> recoverLostSelection() async {}
+  @override
+  Future<String?> load(String userId) async => paths[userId];
+  @override
+  Future<String?> choose(String userId, ProfilePhotoSource source) async {
+    lastSource = source;
+    if (failure != null) throw failure!;
+    if (selected != null) paths[userId] = selected!;
+    return selected;
+  }
+
+  @override
+  Future<void> remove(String userId) async {
+    paths.remove(userId);
+  }
+}
+
+AppFeatures testFeatures() => AppFeatures(
+  location: FakeLocationService(),
+  addresses: FakeAddressLookup(),
+  photos: MemoryPhotoRepository(),
+);

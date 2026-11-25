@@ -1,11 +1,55 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/academic_activity.dart';
+import '../models/activity_sync_state.dart';
+import '../repositories/synchronizing_activity_repository.dart';
 import '../models/discipline.dart';
 import '../repositories/activity_repository.dart';
 
 class ActivityController extends ChangeNotifier {
-  ActivityController({required this.userId, required this.repository});
+  ActivityController({required this.userId, required this.repository}) {
+    final source = _sync;
+    if (source != null) {
+      _subscription = source.watchSession(userId).listen(_acceptSync);
+    }
+  }
+  StreamSubscription<ActivitySyncUpdate>? _subscription;
+  ActivitySyncState? syncState;
+  SynchronizingActivityRepository? get _sync =>
+      repository is SynchronizingActivityRepository
+      ? repository as SynchronizingActivityRepository
+      : null;
+  void _acceptSync(ActivitySyncUpdate update) {
+    if (_disposed) return;
+    _activities = List.of(update.activities);
+    _disciplines = List.of(update.disciplines);
+    syncState = update.state;
+    _notify();
+  }
+
+  bool _refreshFromSync() {
+    final source = _sync;
+    if (source == null) return false;
+    _acceptSync(source.snapshot(userId));
+    return true;
+  }
+
+  void syncNow() {
+    final source = _sync;
+    if (source != null) unawaited(source.synchronize(userId));
+  }
+
+  Future<void> resumeSync() async {
+    final source = _sync;
+    if (source == null) return;
+    try {
+      await source.resume(userId);
+    } catch (_) {
+      /* A fila permanece persistida e a próxima tentativa poderá retomá-la. */
+    }
+  }
+
   final String userId;
   final ActivityRepository repository;
   final _uuid = const Uuid();
@@ -38,16 +82,23 @@ class ActivityController extends ChangeNotifier {
     error = null;
     _notify();
     try {
-      final activities = await repository.listActivities(userId);
-      final disciplines = await repository.listDisciplines(userId);
-      if (_disposed) return;
-      _activities = activities;
-      _disciplines = disciplines;
+      final source = _sync;
+      if (source != null) {
+        await source.startSession(userId);
+        _refreshFromSync();
+      } else {
+        final activities = await repository.listActivities(userId);
+        final disciplines = await repository.listDisciplines(userId);
+        if (_disposed) return;
+        _activities = activities;
+        _disciplines = disciplines;
+      }
     } on ActivityFailure catch (failure) {
       if (!_disposed) error = failure.message;
     } catch (_) {
-      if (!_disposed)
+      if (!_disposed) {
         error = 'Não foi possível carregar suas atividades. Tente novamente.';
+      }
     } finally {
       if (!_disposed) {
         loading = false;
@@ -64,28 +115,33 @@ class ActivityController extends ChangeNotifier {
       } else {
         await repository.updateActivity(activity);
       }
-      _activities.removeWhere((item) => item.id == activity.id);
-      _activities.add(activity);
-      _sort();
+      if (!_refreshFromSync()) {
+        _activities.removeWhere((item) => item.id == activity.id);
+        _activities.add(activity);
+        _sort();
+      }
     });
   }
 
   Future<void> setCompleted(String id, bool completed) async {
     final activity = find(id);
-    if (activity == null)
+    if (activity == null) {
       throw const ActivityFailure('Atividade não encontrada.');
+    }
     await _mutate(id, () async {
       final now = DateTime.now();
       await repository.setCompleted(userId, id, completed, now);
+      if (_refreshFromSync()) return;
       final index = _activities.indexWhere((item) => item.id == id);
-      if (index >= 0)
+      if (index >= 0) {
         _activities[index] = activity.withCompletion(completed, now);
+      }
     });
   }
 
   Future<void> delete(String id) => _mutate(id, () async {
     await repository.deleteActivity(userId, id);
-    _activities.removeWhere((item) => item.id == id);
+    if (!_refreshFromSync()) _activities.removeWhere((item) => item.id == id);
   });
   Future<Discipline> createDiscipline(String name, int color) async {
     final discipline = Discipline(
@@ -95,6 +151,7 @@ class ActivityController extends ChangeNotifier {
       color: color,
     );
     await repository.insertDiscipline(discipline);
+    if (_refreshFromSync()) return discipline;
     _disciplines.add(discipline);
     _disciplines.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -104,8 +161,9 @@ class ActivityController extends ChangeNotifier {
   }
 
   Future<void> _mutate(String id, Future<void> Function() action) async {
-    if (_savingIds.contains(id))
+    if (_savingIds.contains(id)) {
       throw const ActivityFailure('Aguarde a operação em andamento.');
+    }
     _savingIds.add(id);
     _notify();
     try {
@@ -123,11 +181,17 @@ class ActivityController extends ChangeNotifier {
   }
 
   void _requireOwner(AcademicActivity activity) {
-    if (activity.userId != userId)
+    if (activity.userId != userId) {
       throw const ActivityFailure('Atividade indisponível para esta conta.');
+    }
   }
 
-  void _sort() => _activities.sort((a, b) => a.dueAt.compareTo(b.dueAt));
+  void _sort() => _activities.sort((a, b) {
+    final due = a.dueAt.compareTo(b.dueAt);
+    if (due != 0) return due;
+    final created = a.createdAt.compareTo(b.createdAt);
+    return created != 0 ? created : a.id.compareTo(b.id);
+  });
   void _notify() {
     if (!_disposed) notifyListeners();
   }
@@ -135,6 +199,9 @@ class ActivityController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_subscription?.cancel());
+    final source = _sync;
+    if (source != null) unawaited(source.stopSession(userId));
     super.dispose();
   }
 }

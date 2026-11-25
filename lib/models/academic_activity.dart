@@ -1,3 +1,5 @@
+import 'activity_address.dart';
+
 enum ActivityType {
   exam('Prova'),
   assignment('Trabalho'),
@@ -43,6 +45,7 @@ class AcademicActivity {
     this.location = '',
     this.latitude,
     this.longitude,
+    this.address,
   });
   factory AcademicActivity.fromMap(
     Map<String, Object?> map,
@@ -59,6 +62,11 @@ class AcademicActivity {
     location: map['location'] as String,
     latitude: (map['latitude'] as num?)?.toDouble(),
     longitude: (map['longitude'] as num?)?.toDouble(),
+    address: map['address'] is Map
+        ? ActivityAddress.fromMap(
+            Map<String, Object?>.from(map['address'] as Map),
+          )
+        : null,
     createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
     updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int),
   );
@@ -76,6 +84,7 @@ class AcademicActivity {
   final String location;
   final double? latitude;
   final double? longitude;
+  final ActivityAddress? address;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -90,6 +99,7 @@ class AcademicActivity {
     'location': location,
     'latitude': latitude,
     'longitude': longitude,
+    'address': address?.toMap(),
     'created_at': createdAt.millisecondsSinceEpoch,
     'updated_at': updatedAt.millisecondsSinceEpoch,
   };
@@ -108,6 +118,7 @@ class AcademicActivity {
     location: location,
     latitude: latitude,
     longitude: longitude,
+    address: address,
   );
   bool isOverdueAt(DateTime now) => !completed && dueAt.isBefore(now);
   bool matchesStatus(ActivityStatus? status, DateTime now) => switch (status) {

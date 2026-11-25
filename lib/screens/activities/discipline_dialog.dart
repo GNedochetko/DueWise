@@ -44,8 +44,9 @@ class _DisciplineDialogState extends State<DisciplineDialog> {
     } on ActivityFailure catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Não foi possível salvar a disciplina.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
