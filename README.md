@@ -23,12 +23,6 @@ flutter devices
 flutter run -d ID_DO_CELULAR
 ```
 
-Para rodar os testes, use `flutter test`. Para gerar o APK de entrega para celulares ARM64, execute o comando abaixo. O arquivo fica em `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`.
-
-```bash
-flutter build apk --release --target-platform android-arm64 --split-per-abi --split-debug-info=build/symbols/arm64
-```
-
 ## Telas
 
 | Login | Agenda | Calendário |
